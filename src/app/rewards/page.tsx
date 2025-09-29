@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 
-/* Firebase */
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { ref, uploadBytes } from "firebase/storage";
@@ -29,6 +27,36 @@ type PendingSignup = {
   createdAt: number;
 };
 
+type MerchantFS = {
+  rewardPlan?: {
+    period?: Period;
+    tier?: TierId;
+    selectedAt?: { toDate?: () => Date };
+  };
+};
+
+type UserFS = {
+  virtualAccount?: {
+    number?: string;
+    accountNumber?: string;
+    provider?: string | null;
+    providerEnv?: string | null;
+    status?: string | null;
+    createdAt?: unknown;
+    updatedAt?: unknown;
+  } | null;
+};
+
+type TierCard = {
+  id: TierId;
+  title: string;
+  bonus: string;
+  desc: string;
+  badge: ReactNode;
+  highlight?: boolean;
+  span2?: boolean;
+};
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const LOCK_DAYS = 30;
 
@@ -45,9 +73,6 @@ async function reviveFile(obj: {
 export default function GoalPage() {
   const router = useRouter();
 
-  // Mode:
-  // - "onboarding": coming from /signup with pending data in sessionStorage
-  // - "manage": logged-in user editing goal (subject to 30-day lock)
   const [mode, setMode] = useState<"onboarding" | "manage">("onboarding");
 
   const [tab, setTab] = useState<Period>("weekly");
@@ -57,25 +82,20 @@ export default function GoalPage() {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  // onboarding-only
   const [pending, setPending] = useState<PendingSignup | null>(null);
 
-  // manage-only
   const [uid, setUid] = useState<string | null>(null);
   const [lockedUntil, setLockedUntil] = useState<Date | null>(null);
 
-  // Decide mode + preload data
   useEffect(() => {
     const raw = sessionStorage.getItem("hocpay.pendingSignup");
     if (raw) {
-      // Onboarding flow
       setPending(JSON.parse(raw));
       setMode("onboarding");
       setLoading(false);
       return;
     }
 
-    // Manage flow (no pending draft). Require auth.
     const { auth, db } = getFirebase();
 
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -88,11 +108,11 @@ export default function GoalPage() {
       const mref = doc(db, "merchants", user.uid);
       const msnap = await getDoc(mref);
       if (msnap.exists()) {
-        const m = msnap.data() as any;
-        if (m?.rewardPlan?.period) setTab(m.rewardPlan.period as Period);
-        if (m?.rewardPlan?.tier) setSelected(m.rewardPlan.tier as TierId);
+        const m = (msnap.data() || {}) as MerchantFS;
+        if (m?.rewardPlan?.period) setTab(m.rewardPlan.period);
+        if (m?.rewardPlan?.tier) setSelected(m.rewardPlan.tier);
         if (m?.rewardPlan?.selectedAt?.toDate) {
-          const last: Date = m.rewardPlan.selectedAt.toDate();
+          const last: Date = m.rewardPlan.selectedAt.toDate() as Date;
           setLockedUntil(new Date(last.getTime() + LOCK_DAYS * DAY_MS));
         }
       }
@@ -102,25 +122,25 @@ export default function GoalPage() {
     return () => unsub();
   }, [router]);
 
-  const now = new Date();
   const canChange = useMemo(() => {
+    const now = new Date();
     if (mode === "onboarding") return true;
     if (!lockedUntil) return true;
     return now >= lockedUntil;
-  }, [lockedUntil, now, mode]);
+  }, [lockedUntil, mode]);
 
-  const tiers = useMemo(
+  const tiers = useMemo<{ weekly: TierCard[]; monthly: TierCard[] }>(
     () => ({
       weekly: [
         {
-          id: "starter" as TierId,
+          id: "starter",
           title: "Starter - 5 customers per week",
           bonus: "₦500 bonus",
           desc: "Begin your journey! Bring 5 customers weekly, earn ₦500 bonus + starter badge",
           badge: <SparkIcon />,
         },
         {
-          id: "bronze" as TierId,
+          id: "bronze",
           title: "Bronze - 10 customers per week",
           bonus: "₦1,500 bonus",
           desc: "Step Up! Bring 10 customers weekly and unlock ₦1,500 bonus + bronze badge",
@@ -128,7 +148,7 @@ export default function GoalPage() {
           highlight: true,
         },
         {
-          id: "gold" as TierId,
+          id: "gold",
           title: "Gold - 30 customers per week",
           bonus: "₦10,000 bonus",
           desc: "Go Big! 30+ weekly customers = ₦10,000 bonus + Gold recognition",
@@ -138,14 +158,14 @@ export default function GoalPage() {
       ],
       monthly: [
         {
-          id: "starter" as TierId,
+          id: "starter",
           title: "Starter monthly - 20 customers per month",
           bonus: "₦2,000 bonus",
           desc: "Bring 20 customers monthly, earn ₦2,000 bonus + starter badge",
           badge: <SparkIcon />,
         },
         {
-          id: "bronze" as TierId,
+          id: "bronze",
           title: "Silver - 101 customers per month",
           bonus: "₦5,000 bonus",
           desc: "Level up! 10+ customers = ₦5,000 bonus + silver recognition",
@@ -153,7 +173,7 @@ export default function GoalPage() {
           highlight: true,
         },
         {
-          id: "gold" as TierId,
+          id: "gold",
           title: "Elite - 1,000 customers per month",
           bonus: "₦50,000 bonus",
           desc: "Be among the best! Bring 1,000 customers monthly and unlock ₦50,000 + Elite status",
@@ -171,7 +191,6 @@ export default function GoalPage() {
 
     setSaving(true);
     try {
-      // Must be signed in already (existing user only)
       const user = auth.currentUser;
       if (!user) {
         throw new Error(
@@ -180,7 +199,6 @@ export default function GoalPage() {
       }
       const userId = user.uid;
 
-      // Ensure a base profile exists: users/{uid}
       const uref = doc(db, "users", userId);
       const usnap = await getDoc(uref);
       if (!usnap.exists()) {
@@ -189,11 +207,10 @@ export default function GoalPage() {
         );
       }
 
-      const udata = (usnap.data() || {}) as any;
+      const udata = (usnap.data() || {}) as UserFS;
       const va = udata.virtualAccount || null;
       const accountNumber = va?.number || va?.accountNumber || null;
 
-      // Upload KYC files to kyc_merchants/...
       const govFile = await reviveFile(pending.files.govId);
       const utlFile = await reviveFile(pending.files.utility);
 
@@ -208,7 +225,6 @@ export default function GoalPage() {
       await uploadBytes(govRef, govFile);
       await uploadBytes(utlRef, utlFile);
 
-      // Create/merge merchants/{uid}
       await setDoc(
         doc(db, "merchants", userId),
         {
@@ -245,7 +261,6 @@ export default function GoalPage() {
         { merge: true }
       );
 
-      // Mark base user
       await setDoc(
         uref,
         {
@@ -262,8 +277,12 @@ export default function GoalPage() {
       setTimeout(() => {
         router.replace("/dashboard");
       }, 1500);
-    } catch (e: any) {
-      alert(e?.message ?? "Couldn't finish registration. Please try again.");
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error
+          ? e.message
+          : "Couldn't finish registration. Please try again.";
+      alert(msg);
       setSaving(false);
     }
   }
@@ -285,14 +304,17 @@ export default function GoalPage() {
         { merge: true }
       );
       router.replace("/dashboard");
-    } catch (e: any) {
-      alert(e?.message ?? "Couldn't update goal. Please try again.");
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error
+          ? e.message
+          : "Couldn't update goal. Please try again.";
+      alert(msg);
     } finally {
       setSaving(false);
     }
   }
 
-  // Handle back button - clear session storage
   const handleBack = () => {
     if (mode === "onboarding") {
       sessionStorage.removeItem("hocpay.pendingSignup");
@@ -305,7 +327,6 @@ export default function GoalPage() {
   const onPrimary = () =>
     mode === "onboarding" ? completeOnboarding() : updateGoal();
 
-  // Show success screen
   if (success) {
     return (
       <main className="grid min-h-[100svh] place-items-center bg-white p-6">
@@ -360,14 +381,12 @@ export default function GoalPage() {
   return (
     <main className="min-h-screen">
       <div className="grid min-h-[100svh] grid-cols-1 md:grid-cols-2">
-        {/* LEFT */}
         <section className="bg-white px-6 py-10 sm:px-10 md:px-14 md:py-16">
           <h1 className="text-[34px] font-extrabold leading-tight">
             Set Your Earning Goal
           </h1>
           <p className="mt-2 max-w-prose text-sm text-slate-600">{lockMsg}</p>
 
-          {/* Toggle */}
           <div className="mt-6 inline-flex rounded-full bg-slate-100 p-1">
             <button
               onClick={() => (canChange ? setTab("weekly") : null)}
@@ -389,7 +408,6 @@ export default function GoalPage() {
             </button>
           </div>
 
-          {/* Tiers */}
           <div className="mt-7 grid gap-5 md:grid-cols-2">
             {tiers[tab].map((t) => {
               const isSelected = selected === t.id;
@@ -404,7 +422,7 @@ export default function GoalPage() {
                     isSelected
                       ? "border-[#2B78FF] ring-2 ring-[#2B78FF] bg-[#EAF2FF]"
                       : "border-slate-200 bg-white hover:border-[#BFD7FF]",
-                    (t as any).span2 ? "md:col-span-2" : "",
+                    t.span2 ? "md:col-span-2" : "",
                     !canChange ? "cursor-not-allowed opacity-60" : "",
                   ].join(" ")}
                 >
@@ -451,7 +469,6 @@ export default function GoalPage() {
           </div>
         </section>
 
-        {/* RIGHT — blue pane */}
         <aside className="relative overflow-hidden bg-[#0068FF]">
           <p className="absolute right-8 top-20 max-w-xs text-right text-lg font-semibold leading-relaxed text-white md:right-14">
             Quick and Easy Setup

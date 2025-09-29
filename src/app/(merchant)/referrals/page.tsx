@@ -13,7 +13,7 @@ import { useRouter } from "next/navigation";
 
 type Referral = {
   id: string;
-  joinedAt: string; // ISO
+  joinedAt: string;
   name: string;
   totalTx: number;
   cashback: number;
@@ -51,14 +51,12 @@ export default function ReferralsPage() {
   const [loading, setLoading] = useState(true);
   const [allReferrals, setAllReferrals] = useState<Referral[]>([]);
 
-  // Default Status filter = Active (so table shows only active by default)
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"All" | "Active" | "Inactive">("Active");
   const [month, setMonth] = useState<"All" | number>("All");
   const [page, setPage] = useState(1);
   const pageSize = 10;
 
-  // Fetch referrals
   useEffect(() => {
     const { auth, db } = getFirebase();
 
@@ -106,7 +104,6 @@ export default function ReferralsPage() {
     return () => unsub();
   }, [router]);
 
-  // ---------- Lifetime KPIs (computed from ALL referrals) ----------
   const k_totalReferrals = allReferrals.length;
   const k_activeReferrals = allReferrals.filter(
     (r) => r.status === "Active"
@@ -114,7 +111,6 @@ export default function ReferralsPage() {
   const k_totalTransactions = allReferrals.reduce((s, r) => s + r.totalTx, 0);
   const k_totalCashback = allReferrals.reduce((s, r) => s + r.cashback, 0);
 
-  // ---------- Table: filtered list (defaults to Active) ----------
   const filtered = useMemo(() => {
     let list = [...allReferrals];
     const q = search.trim().toLowerCase();
@@ -146,7 +142,6 @@ export default function ReferralsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-semibold">Referrals</h1>
         <p className="text-sm text-slate-500">
@@ -154,7 +149,6 @@ export default function ReferralsPage() {
         </p>
       </div>
 
-      {/* KPIs (lifetime) */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Kpi title="Active Referrals" value={k_activeReferrals.toString()} />
         <Kpi title="Total Referrals" value={k_totalReferrals.toString()} />
@@ -168,7 +162,6 @@ export default function ReferralsPage() {
         />
       </div>
 
-      {/* Search / Filters */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative w-full max-w-md">
           <input
@@ -189,7 +182,8 @@ export default function ReferralsPage() {
           label="Status"
           value={status}
           onChange={(v) => {
-            setStatus(v as any);
+            setStatus(v as "All" | "Active" | "Inactive");
+
             setPage(1);
           }}
           options={[
@@ -218,7 +212,6 @@ export default function ReferralsPage() {
         />
       </div>
 
-      {/* Table */}
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table className="min-w-[900px] w-full text-sm">
           <thead className="bg-slate-50 text-left text-slate-600">
@@ -267,7 +260,6 @@ export default function ReferralsPage() {
         </table>
       </div>
 
-      {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between gap-3">
           <div className="text-xs text-slate-500">

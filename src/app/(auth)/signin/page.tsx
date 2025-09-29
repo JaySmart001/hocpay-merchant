@@ -1,16 +1,28 @@
-// src/app/(auth)/signin/page.tsx
 "use client";
 
-import { useEffect, useState, FormEvent } from "react";
+import { Suspense, useEffect, useState, FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-/* Firebase */
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { FirebaseError } from "firebase/app";
 import { getFirebase } from "@/app/lib/firebase";
 
-export default function SignIn() {
+export default function SignInPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="grid min-h-[100svh] place-items-center">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#0068FF] border-t-transparent" />
+        </main>
+      }
+    >
+      <SignInInner />
+    </Suspense>
+  );
+}
+
+function SignInInner() {
   const router = useRouter();
   const params = useSearchParams();
   const { auth, db } = getFirebase();
@@ -24,10 +36,8 @@ export default function SignIn() {
   const [submitting, setSubmitting] = useState(false);
   const [ready, setReady] = useState(false);
 
-  // Show CTA (not a merchant yet) instead of a blocking error
   const [notMerchant, setNotMerchant] = useState(false);
 
-  // If already signed in, route appropriately
   useEffect(() => {
     const u = auth.currentUser;
     if (!u) {
@@ -60,14 +70,12 @@ export default function SignIn() {
     setSubmitting(true);
 
     try {
-      // 1) Email/password sign-in
       const cred = await signInWithEmailAndPassword(
         auth,
         email.trim(),
         password
       );
 
-      // 2) Check merchant doc
       const uid = cred.user.uid;
       const mRef = doc(db, "merchants", uid);
       const mSnap = await getDoc(mRef);
@@ -77,13 +85,11 @@ export default function SignIn() {
         return;
       }
 
-      // Not a merchant yet:
       if (next.startsWith("/signup")) {
-        router.replace(next); // continue to merchant application
+        router.replace(next);
         return;
       }
 
-      // Default: keep session and show CTA to proceed to signup
       setNotMerchant(true);
     } catch (err) {
       let msg = "Could not sign in. Please try again.";
@@ -123,7 +129,6 @@ export default function SignIn() {
   return (
     <main className="min-h-screen">
       <div className="grid min-h-[100svh] grid-cols-1 md:grid-cols-2">
-        {/* LEFT: form */}
         <section className="bg-white px-6 py-10 sm:px-10 md:px-14 md:py-16">
           <h1 className="text-3xl font-extrabold tracking-tight">
             Welcome To HocPay Merchant
@@ -195,7 +200,6 @@ export default function SignIn() {
 
             <p className="text-xs text-slate-500">
               Don’t have an account?{" "}
-              {/* Use next=/signup so sign-in sends them directly into the flow */}
               <a
                 href="/signin?next=/signup"
                 className="text-[#0068FF] hover:underline"
@@ -206,7 +210,6 @@ export default function SignIn() {
           </form>
         </section>
 
-        {/* RIGHT: blue illustration panel */}
         <aside className="relative bg-[#0068FF] text-white">
           <div className="absolute inset-0">
             <p className="absolute right-8 top-24 max-w-xs text-right text-lg font-semibold leading-relaxed md:right-16">

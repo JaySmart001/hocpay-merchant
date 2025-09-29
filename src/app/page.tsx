@@ -2,10 +2,8 @@ import Link from "next/link";
 
 export default function Landing() {
   return (
-    // full-bleed; lock to viewport height on md+ (no vertical scroll)
     <main className="md:h-screen md:overflow-hidden">
       <div className="grid min-h-[100svh] grid-cols-1 md:grid-cols-2">
-        {/* LEFT — content */}
         <section className="bg-white px-6 py-10 sm:px-10 md:px-14 md:py-14">
           <h1 className="text-[34px] font-extrabold leading-tight sm:text-[40px]">
             Make Every Transaction{" "}
@@ -17,7 +15,6 @@ export default function Landing() {
             for every referral.
           </p>
 
-          {/* How it Works */}
           <div className="mt-12">
             <h2 className="text-lg font-semibold text-slate-800">
               How it Works
@@ -31,7 +28,6 @@ export default function Landing() {
             </ol>
           </div>
 
-          {/* Why Join */}
           <div className="mt-12">
             <h2 className="text-lg font-semibold text-slate-800">Why Join?</h2>
             <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -47,7 +43,6 @@ export default function Landing() {
             </div>
           </div>
 
-          {/* CTA */}
           <div className="mt-10">
             <Link
               href="/signin?next=/signup"
@@ -58,25 +53,20 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* RIGHT — brand panel */}
         <aside className="relative bg-[#0068FF]">
-          {/* center cluster */}
           <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
             <div className="mx-auto grid w-[min(90vw,640px)] place-items-center text-white">
-              {/* dotted circle underlay */}
               <div className="absolute h-64 w-64 rounded-full border-2 border-white/30" />
               <FloatingCards />
             </div>
           </div>
 
-          {/* headline on the blue, top-right */}
           <p className="absolute right-8 top-20 max-w-xs text-right text-xl font-semibold leading-relaxed text-white md:right-16 md:top-24">
             Quick and Easy Setup
             <br />
             <span className="text-white/90">no heavy paperwork</span>
           </p>
 
-          {/* security block pinned bottom-right */}
           <div className="absolute bottom-10 right-6 md:right-10">
             <ShieldMonitor />
           </div>
@@ -85,8 +75,6 @@ export default function Landing() {
     </main>
   );
 }
-
-/* ---------- tiny UI bits ---------- */
 
 function Step({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
@@ -100,7 +88,6 @@ function Step({ icon, label }: { icon: React.ReactNode; label: string }) {
 }
 
 function Arrow() {
-  // brand-colored arrow so it’s visible on the white side
   return <span className="hidden text-2xl text-[#0068FF]/60 sm:block">→</span>;
 }
 
@@ -114,8 +101,6 @@ function Feature({ icon, title }: { icon: React.ReactNode; title: string }) {
     </div>
   );
 }
-
-/* ---------- Illustrations (SVG) ---------- */
 
 function FloatingCards() {
   return (
@@ -201,7 +186,6 @@ function ShieldMonitor() {
   );
 }
 
-/* ---------- minimal icons ---------- */
 function UserIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-5 w-5">

@@ -6,10 +6,8 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { getFirebase } from "@/app/lib/firebase";
 
-/** ----------- Types ----------- */
 type StepKey = "basic" | "location" | "verify";
 
-/** ----------- Helpers ----------- */
 const FULLNAME_OK = (name: string) => {
   const parts = name.trim().split(/\s+/);
   if (parts.length < 2) return false;
@@ -23,7 +21,6 @@ const ALLOWED_MIME = ["application/pdf", "image/jpeg", "image/png"];
 const ACCEPT_ATTR = "application/pdf,image/png,image/jpeg";
 const MAX_BYTES = 5 * 1024 * 1024;
 
-// serialize File -> (name,type,dataUrl) so we can move across pages
 async function fileToSerializable(f: File) {
   const reader = new FileReader();
   const p = new Promise<{ name: string; type: string; dataUrl: string }>(
@@ -37,37 +34,31 @@ async function fileToSerializable(f: File) {
   return p;
 }
 
-/** ----------- Page ----------- */
 export default function MerchantSignup() {
   const router = useRouter();
   const submittingRef = useRef(false);
   const [step, setStep] = useState<StepKey>("basic");
 
-  // Full-screen blocking loader
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Signed-in banner
   const [signedInEmail, setSignedInEmail] = useState<string>("");
 
-  // Form state
   const [form, setForm] = useState({
-    // basic
     fullName: "",
     email: "",
     phone: "",
-    // location
+
     address: "",
     city: "",
     state: "",
     country: "Nigeria",
-    // verify
+
     govIdFile: null as File | null,
     utilityFile: null as File | null,
     bvn: "",
   });
 
-  // Prefill from current session (must be signed in)
   useEffect(() => {
     const { auth, db } = getFirebase();
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -81,20 +72,23 @@ export default function MerchantSignup() {
       try {
         const usnap = await getDoc(doc(db, "users", user.uid));
         const u = usnap.data() || {};
+        const uTyped =
+          (usnap.data() as Partial<{
+            name: string;
+            email: string;
+            phone: string;
+          }>) || {};
         setForm((f) => ({
           ...f,
-          fullName: (u as any).name || user.displayName || "",
-          email: user.email || (u as any).email || "",
-          phone: (u as any).phone || f.phone,
+          fullName: uTyped.name || user.displayName || "",
+          email: user.email || uTyped.email || "",
+          phone: uTyped.phone || f.phone,
         }));
-      } catch {
-        // ignore – user can still fill missing fields
-      }
+      } catch {}
     });
     return () => unsub();
   }, [router]);
 
-  // file errors
   const [govIdErr, setGovIdErr] = useState<string | null>(null);
   const [utilityErr, setUtilityErr] = useState<string | null>(null);
 
@@ -131,7 +125,6 @@ export default function MerchantSignup() {
     );
   const back = () => setStep(step === "verify" ? "location" : "basic");
 
-  /** Final submit: store pending data locally, go to /rewards */
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canNext || submittingRef.current) return;
@@ -141,7 +134,6 @@ export default function MerchantSignup() {
     setSubmitError(null);
 
     try {
-      // serialize files so we can revive them on /rewards
       const gov = await fileToSerializable(form.govIdFile as File);
       const utl = await fileToSerializable(form.utilityFile as File);
 
@@ -160,8 +152,12 @@ export default function MerchantSignup() {
 
       sessionStorage.setItem("hocpay.pendingSignup", JSON.stringify(pending));
       router.push("/rewards");
-    } catch (err: any) {
-      setSubmitError(err?.message ?? "Couldn't proceed. Please try again.");
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Couldn't proceed. Please try again.";
+      setSubmitError(msg);
       setSubmitting(false);
       submittingRef.current = false;
     }
@@ -179,7 +175,6 @@ export default function MerchantSignup() {
   return (
     <main className="md:h-screen md:overflow-hidden">
       <div className="grid min-h-[100svh] grid-cols-1 md:grid-cols-2">
-        {/* LEFT — form */}
         <section className="bg-white px-6 py-10 sm:px-10 md:px-14 md:py-14">
           <h1 className="text-3xl font-extrabold tracking-tight md:text-[32px]">
             Create Your Merchant Account
@@ -201,10 +196,8 @@ export default function MerchantSignup() {
             </div>
           )}
 
-          {/* Stepper */}
           <Stepper step={step} className="mt-6" />
 
-          {/* Form */}
           <form onSubmit={onSubmit} className="mt-8 space-y-6">
             {step === "basic" && (
               <div className="space-y-5">
@@ -346,7 +339,6 @@ export default function MerchantSignup() {
               </div>
             )}
 
-            {/* Actions */}
             <div className="mt-2 flex items-center justify-between">
               {step !== "basic" ? (
                 <button
@@ -389,7 +381,6 @@ export default function MerchantSignup() {
           </form>
         </section>
 
-        {/* RIGHT — blue panel */}
         <aside className="relative bg-[#0068FF]">
           <div className="pointer-events-none absolute left-1/2 top-24 -translate-x-1/2">
             <div className="relative mx-auto grid w-[min(90vw,640px)] place-items-center text-white">
@@ -410,7 +401,6 @@ export default function MerchantSignup() {
         </aside>
       </div>
 
-      {/* blocking overlay */}
       {submitting && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-white/90 p-6 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-center shadow">
@@ -427,8 +417,6 @@ export default function MerchantSignup() {
     </main>
   );
 }
-
-/* ---------- Small UI bits ---------- */
 
 function Stepper({
   step,
@@ -584,7 +572,6 @@ function UploadField({
   );
 }
 
-/* ---------- Illustrations ---------- */
 function FloatingCards() {
   return (
     <svg viewBox="0 0 220 90" className="relative z-10 h-28 w-auto text-white">

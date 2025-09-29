@@ -4,11 +4,11 @@ import { useMemo, useState } from "react";
 
 type Tx = {
   id: string;
-  date: string; // ISO
+  date: string;
   refName: string;
-  amount: number; // NGN
+  amount: number;
   type: "Airtime" | "Data" | "Betting" | "Bank Transfer" | "Electricity" | "TV";
-  earned: number; // NGN
+  earned: number;
   status: "Successful" | "Failed";
 };
 
@@ -169,7 +169,6 @@ export default function TransactionsPage() {
   const current = filtered.slice((page - 1) * pageSize, page * pageSize);
   if (page > totalPages) setPage(1);
 
-  // KPI cards
   const k_total = MOCK.length;
   const k_success = MOCK.filter((t) => t.status === "Successful").length;
   const k_failed = MOCK.filter((t) => t.status === "Failed").length;
@@ -183,7 +182,6 @@ export default function TransactionsPage() {
         </p>
       </div>
 
-      {/* KPIs */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Kpi title="Total Transactions" value={k_total.toLocaleString()} />
         <Kpi
@@ -196,7 +194,6 @@ export default function TransactionsPage() {
         />
       </div>
 
-      {/* Filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative w-full sm:max-w-md">
           <input
@@ -218,7 +215,8 @@ export default function TransactionsPage() {
             label="Status"
             value={status}
             onChange={(v) => {
-              setStatus(v as any);
+              setStatus(v as "All" | "Successful" | "Failed");
+
               setPage(1);
             }}
             options={[
@@ -247,7 +245,6 @@ export default function TransactionsPage() {
         </div>
       </div>
 
-      {/* Table */}
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table className="min-w-[1100px] w-full text-sm">
           <thead className="bg-slate-50 text-left text-slate-600">
@@ -297,7 +294,6 @@ export default function TransactionsPage() {
         </table>
       </div>
 
-      {/* Pagination */}
       <div className="flex items-center justify-between gap-3">
         <div className="text-xs text-slate-500">
           Showing {filtered.length === 0 ? 0 : (page - 1) * pageSize + 1} –{" "}

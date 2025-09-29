@@ -6,7 +6,6 @@ const KEY = "hocpay_auth_v1";
 export type Session = { email: string };
 
 export function signInLocal(email: string, password: string): Session | null {
-  // Demo credentials
   if (
     email.trim().toLowerCase() === "test@gmail.com" &&
     password === "123456"

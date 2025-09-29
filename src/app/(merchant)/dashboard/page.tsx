@@ -25,22 +25,21 @@ type MerchantDoc = {
   fullName?: string;
   status?: "Active" | "Suspended" | "created";
   referralCode?: string;
-  cashbackEarned?: number; // lifetime
+  cashbackEarned?: number;
   rewardPlan?: {
     period?: PeriodMode;
     tier?: TierId;
-    selectedAt?: any;
+    selectedAt?: Timestamp | Date;
   };
   currentCycleId?: string;
-  currentCycleStart?: any;
-  totalReferrals?: number; // legacy roll-up (not used for live counts)
+  currentCycleStart?: Timestamp | Date;
 };
 
 type CycleRecord = {
   period: PeriodMode;
   tier: TierId;
-  startDate: any; // Timestamp
-  endDate: any; // Timestamp
+  startDate: Timestamp | Date;
+  endDate: Timestamp | Date;
   threshold: number;
   amountDue: number;
   payoutStatus: "paid" | "unpaid";
@@ -48,8 +47,8 @@ type CycleRecord = {
 
 type ReferralDoc = {
   name?: string;
-  joinedAt?: any; // Timestamp
-  createdAt?: any; // fallback
+  joinedAt?: Timestamp | Date;
+  createdAt?: Timestamp | Date;
   cashback?: number;
   isActive?: boolean;
 };
@@ -60,6 +59,12 @@ type RecentReferral = {
   name: string;
   status: "Active";
 };
+
+type UserDoc = {
+  wallet?: {
+    balance?: number;
+  };
+} & Record<string, unknown>;
 
 const WEEKLY_THRESHOLDS: Record<TierId, number> = {
   starter: 5,
@@ -72,7 +77,6 @@ const MONTHLY_THRESHOLDS: Record<TierId, number> = {
   gold: 1000,
 };
 
-/** count ALL referrals with optional constraints; with index fallbacks */
 async function countAll(
   refCol: ReturnType<typeof collection>,
   ...constraints: QueryConstraint[]
@@ -90,7 +94,6 @@ async function countAll(
   }
 }
 
-/** count ACTIVE referrals with optional constraints; with index fallbacks */
 async function countActive(
   refCol: ReturnType<typeof collection>,
   ...constraints: QueryConstraint[]
@@ -105,7 +108,8 @@ async function countActive(
       const snap = await getDocs(query(refCol, ...constraints));
       let n = 0;
       snap.forEach((d) => {
-        if ((d.data() as any)?.isActive === true) n++;
+        const data = d.data() as ReferralDoc;
+        if (data?.isActive === true) n++;
       });
       return n;
     } catch {
@@ -114,7 +118,6 @@ async function countActive(
   }
 }
 
-/** sum cashback among ACTIVE referrals for docs satisfying constraints */
 async function sumActiveCashback(
   refCol: ReturnType<typeof collection>,
   ...constraints: QueryConstraint[]
@@ -142,7 +145,6 @@ async function sumActiveCashback(
   }
 }
 
-/** fetch recent ACTIVE referrals (max N) sorted by joinedAt desc */
 async function recentActive(
   refCol: ReturnType<typeof collection>,
   take: number
@@ -158,7 +160,13 @@ async function recentActive(
     return snap.docs.map((d) => {
       const data = d.data() as ReferralDoc;
       const joinedAt =
-        data.joinedAt?.toDate?.() || data.createdAt?.toDate?.() || new Date();
+        ((data.joinedAt as Timestamp | Date | undefined) &&
+          (data.joinedAt as Timestamp & { toDate?: () => Date })?.toDate?.()) ||
+        ((data.createdAt as Timestamp | Date | undefined) &&
+          (
+            data.createdAt as Timestamp & { toDate?: () => Date }
+          )?.toDate?.()) ||
+        new Date();
       return {
         id: d.id,
         name: data.name || "Unknown",
@@ -179,7 +187,15 @@ async function recentActive(
       .slice(0, take)
       .map(({ id, data }) => {
         const joinedAt =
-          data.joinedAt?.toDate?.() || data.createdAt?.toDate?.() || new Date();
+          ((data.joinedAt as Timestamp | Date | undefined) &&
+            (
+              data.joinedAt as Timestamp & { toDate?: () => Date }
+            )?.toDate?.()) ||
+          ((data.createdAt as Timestamp | Date | undefined) &&
+            (
+              data.createdAt as Timestamp & { toDate?: () => Date }
+            )?.toDate?.()) ||
+          new Date();
         return {
           id,
           name: data.name || "Unknown",
@@ -207,21 +223,18 @@ export default function DashboardPage() {
   const [shareLink, setShareLink] = useState<string>("");
   const [copied, setCopied] = useState(false);
 
-  // KPIs
-  const [totalCashback, setTotalCashback] = useState(0); // lifetime cashback
-  const [monthlyCashback, setMonthlyCashback] = useState(0); // ACTIVE this month
-  const [totalReferrals, setTotalReferrals] = useState(0); // ALL lifetime
-  const [totalActiveReferrals, setTotalActiveReferrals] = useState(0); // ACTIVE lifetime
+  const [totalCashback, setTotalCashback] = useState(0);
+  const [monthlyCashback, setMonthlyCashback] = useState(0);
+  const [totalReferrals, setTotalReferrals] = useState(0);
+  const [totalActiveReferrals, setTotalActiveReferrals] = useState(0);
   const [recentReferrals, setRecentReferrals] = useState<RecentReferral[]>([]);
 
-  // Goal tracking (ACTIVE inside cycle)
   const [goalTarget, setGoalTarget] = useState(0);
   const [goalProgress, setGoalProgress] = useState(0);
   const [goalPeriodLabel, setGoalPeriodLabel] = useState<"Week" | "Month">(
     "Week"
   );
 
-  // Wallet balance
   const [walletBalance, setWalletBalance] = useState(0);
 
   useEffect(() => {
@@ -234,7 +247,6 @@ export default function DashboardPage() {
       }
 
       try {
-        // Merchant doc
         const msnap = await getDoc(doc(db, "merchants", user.uid));
         if (!msnap.exists()) {
           router.replace("/signup");
@@ -256,16 +268,21 @@ export default function DashboardPage() {
           setShareLink(`${base}/r/${m.referralCode}`);
         }
 
-        // Wallet balance
         try {
           const userDoc = await getDoc(doc(db, "users", user.uid));
           if (userDoc.exists()) {
-            const u = userDoc.data() as any;
+            const u = userDoc.data() as UserDoc;
             let balance = 0;
-            if (u?.wallet && typeof u.wallet === "object") {
-              balance = Number(u.wallet.balance || 0);
-            } else if (typeof u?.["wallet.balance"] === "number") {
-              balance = Number(u["wallet.balance"]);
+            const walletField = u.wallet;
+            if (walletField && typeof walletField === "object") {
+              balance = Number(walletField.balance || 0);
+            } else if (
+              typeof (u as Record<string, unknown>)["wallet.balance"] ===
+              "number"
+            ) {
+              balance = Number(
+                (u as Record<string, unknown>)["wallet.balance"]
+              );
             }
             setWalletBalance(balance);
           }
@@ -273,18 +290,14 @@ export default function DashboardPage() {
           console.error("Error fetching wallet:", e);
         }
 
-        // Referrals collection
         const refCol = collection(db, "merchants", user.uid, "referrals");
 
-        // KPI: Total Referrals (ALL, lifetime)
         const allTotal = await countAll(refCol);
         setTotalReferrals(allTotal);
 
-        // KPI: Total Active Referrals (lifetime)
         const activeTotal = await countActive(refCol);
         setTotalActiveReferrals(activeTotal);
 
-        // This month's window
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
         const nextMonthStart = new Date(
@@ -293,7 +306,6 @@ export default function DashboardPage() {
           1
         );
 
-        // KPI: This Month's Cashback (Active only)
         const monthCash = await sumActiveCashback(
           refCol,
           where("joinedAt", ">=", Timestamp.fromDate(monthStart)),
@@ -301,10 +313,8 @@ export default function DashboardPage() {
         );
         setMonthlyCashback(monthCash);
 
-        // Recent ACTIVE referrals
         setRecentReferrals(await recentActive(refCol, 5));
 
-        // Goal progress (ACTIVE inside cycle window or plan-based fallback)
         let computedTarget = 0;
         let computedProgress = 0;
         let periodLabel: "Week" | "Month" = "Week";
@@ -407,7 +417,6 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Wallet Balance Card */}
       <Card>
         <div className="flex items-center justify-between">
           <div>
@@ -424,7 +433,6 @@ export default function DashboardPage() {
         </div>
       </Card>
 
-      {/* Referral code block */}
       <Card>
         <h3 className="text-sm font-medium text-slate-700">
           Your Referral Code
@@ -432,8 +440,8 @@ export default function DashboardPage() {
 
         {status !== "Active" ? (
           <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            Your merchant account is under review. Once you're verified, your
-            referral code will appear here.
+            Your merchant account is under review. Once you&#39;re verified,
+            your referral code will appear here.
           </div>
         ) : referralCode ? (
           <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -474,17 +482,16 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-            You are verified, but we couldn't find a referral code yet. Please
-            contact support to generate one.
+            You are verified, but we couldn&#39;t find a referral code yet.
+            Please contact support to generate one.
           </div>
         )}
       </Card>
 
-      {/* KPIs */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Kpi title="Lifetime Earnings" value={formatCurrency(totalCashback)} />
         <Kpi
-          title="This Month's Cashback (Active)"
+          title="This Month&#39;s Cashback (Active)"
           value={formatCurrency(monthlyCashback)}
         />
         <Kpi title="Total Referrals" value={totalReferrals.toString()} />
@@ -494,7 +501,6 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Goal Tracker (ACTIVE inside window) */}
       {goalTarget > 0 && (
         <Card>
           <h3 className="text-sm font-medium text-slate-700">
@@ -529,7 +535,6 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {/* Recent ACTIVE referrals */}
       <Card>
         <h3 className="mb-3 text-sm font-medium text-slate-700">
           Recent Referrals (Active)
@@ -571,7 +576,6 @@ export default function DashboardPage() {
   );
 }
 
-/* ——— little components ——— */
 function Card({
   children,
   className = "",
